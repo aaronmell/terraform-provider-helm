@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -259,7 +260,7 @@ func prepareTillerForNewRelease(d *schema.ResourceData, c helm.Interface, name s
 			break
 		default:
 			// err is not nil. we can't get a release. abort
-			return err
+			return fmt.Errorf("Failed getting release named %s %s", name, err)
 		}
 
 		switch r.Info.Status.GetCode() {
@@ -273,8 +274,7 @@ func prepareTillerForNewRelease(d *schema.ResourceData, c helm.Interface, name s
 				name,
 				d.Get("disable_webhooks").(bool),
 				int64(d.Get("timeout").(int))); err != nil {
-				debug("could not delete release %s: %v", name, err)
-				return err
+				return fmt.Errorf("could not delete release %s: %v", name, err)
 			}
 
 			continue
@@ -303,29 +303,28 @@ func resourceDiff(d *schema.ResourceDiff, meta interface{}) error {
 	// Always set desired state to DEPLOYED
 	err := d.SetNew("status", release.Status_DEPLOYED.String())
 	if err != nil {
-		return err
+		return fmt.Errorf("Error occurred when setting state to Deployed during diff %s", err)
 	}
 
 	// Get Chart metadata, if we fail - we're done
 	c, _, err := getChart(d, meta.(*Meta))
 	if err != nil {
-		return nil
+		return nil //fmt.Errorf("Error occurred when getting chart metadata during diff %s", err)
 	}
 
 	// Set desired version from the Chart metadata if available
 	if len(c.Metadata.Version) > 0 {
 		return d.SetNew("version", c.Metadata.Version)
-	} else {
-		return d.SetNewComputed("version")
 	}
 
+	return d.SetNewComputed("version")
 }
 
 func resourceReleaseCreate(d *schema.ResourceData, meta interface{}) error {
 	m := meta.(*Meta)
 	c, err := m.GetHelmClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("Getting helm client during create failed %s", err)
 	}
 	name := d.Get("name").(string)
 
@@ -335,12 +334,12 @@ func resourceReleaseCreate(d *schema.ResourceData, meta interface{}) error {
 
 	chart, _, err := getChart(d, m)
 	if err != nil {
-		return err
+		return fmt.Errorf("Getting helm chart during create failed %s", err)
 	}
 
 	values, err := getValues(d)
 	if err != nil {
-		return err
+		return fmt.Errorf("Getting helm chart values during create failed %s", err)
 	}
 
 	opts := []helm.InstallOption{
@@ -356,29 +355,39 @@ func resourceReleaseCreate(d *schema.ResourceData, meta interface{}) error {
 	ns := d.Get("namespace").(string)
 	res, err := c.InstallReleaseFromChart(chart, ns, opts...)
 	if err != nil {
-		return err
+		return fmt.Errorf("Installing release during create failed %s", err)
 	}
 
-	return setIDAndMetadataFromRelease(d, res.Release)
+	err = setIDAndMetadataFromRelease(d, res.Release)
+
+	if err != nil {
+		return fmt.Errorf("Setting id and metadata during create failed %s", err)
+	}
+
+	return nil
 }
 
 func resourceReleaseRead(d *schema.ResourceData, meta interface{}) error {
 	m := meta.(*Meta)
 	c, err := m.GetHelmClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("Getting helm client during read failed %s", err)
 	}
 
 	name := d.Get("name").(string)
 
 	r, err := getRelease(c, name)
 	if err != nil {
-		return err
+		return fmt.Errorf("Getting helm relase during read failed %s", err)
 	}
 
-	//  d.Set("values_source_detected_md5", d.Get("values_sources_md5"))
+	err = setIDAndMetadataFromRelease(d, r)
 
-	return setIDAndMetadataFromRelease(d, r)
+	if err != nil {
+		return fmt.Errorf("Setting id and metadata during read failed %s", err)
+	}
+
+	return nil
 }
 
 func setIDAndMetadataFromRelease(d *schema.ResourceData, r *release.Release) error {
@@ -402,12 +411,12 @@ func resourceReleaseUpdate(d *schema.ResourceData, meta interface{}) error {
 
 	values, err := getValues(d)
 	if err != nil {
-		return err
+		return fmt.Errorf("Getting helm chart values during update failed %s", err)
 	}
 
 	_, path, err := getChart(d, m)
 	if err != nil {
-		return err
+		return fmt.Errorf("Getting helm chart during update failed %s", err)
 	}
 
 	opts := []helm.UpdateOption{
@@ -422,23 +431,36 @@ func resourceReleaseUpdate(d *schema.ResourceData, meta interface{}) error {
 
 	c, err := m.GetHelmClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("Getting helm client during update failed %s", err)
 	}
 
-	name := d.Get("name").(string)
-	res, err := c.UpdateRelease(name, path, opts...)
-	if err != nil {
-		return err
-	}
+	return resource.Retry(d.Timeout(schema.TimeoutDelete), func() *resource.RetryError {
+		name := d.Get("name").(string)
+		res, err := c.UpdateRelease(name, path, opts...)
 
-	return setIDAndMetadataFromRelease(d, res.Release)
+		if err != nil {
+
+			if err.Error() == "EOF" {
+				return resource.RetryableError(err)
+			}
+
+			return resource.NonRetryableError(fmt.Errorf("Updating Release named %s failed %s", name, err))
+		}
+
+		err = setIDAndMetadataFromRelease(d, res.Release)
+		if err != nil {
+			return resource.NonRetryableError(fmt.Errorf("Failed to set Id and metadata during update for %s %s", name, err))
+		}
+
+		return nil
+	})
 }
 
 func resourceReleaseDelete(d *schema.ResourceData, meta interface{}) error {
 	m := meta.(*Meta)
 	c, err := m.GetHelmClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("Error getting helm client %s", err)
 	}
 
 	name := d.Get("name").(string)
@@ -446,7 +468,7 @@ func resourceReleaseDelete(d *schema.ResourceData, meta interface{}) error {
 	timeout := int64(d.Get("timeout").(int))
 
 	if err := deleteRelease(c, name, disableWebhooks, timeout); err != nil {
-		return err
+		return fmt.Errorf("Error deleting release %s: %s", name, err)
 	}
 	d.SetId("")
 	return nil
@@ -455,9 +477,11 @@ func resourceReleaseDelete(d *schema.ResourceData, meta interface{}) error {
 func resourceReleaseExists(d *schema.ResourceData, meta interface{}) (bool, error) {
 	m := meta.(*Meta)
 	c, err := m.GetHelmClient()
+
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("Error getting helm client when checking for release %s", err)
 	}
+
 	name := d.Get("name").(string)
 	_, err = getRelease(c, name)
 	if err == nil {
@@ -468,7 +492,7 @@ func resourceReleaseExists(d *schema.ResourceData, meta interface{}) (bool, erro
 		return false, nil
 	}
 
-	return false, err
+	return false, fmt.Errorf("Error getting release %s", err)
 }
 
 func deleteRelease(c helm.Interface, name string, disableWebhooks bool, timeout int64) error {
@@ -480,7 +504,7 @@ func deleteRelease(c helm.Interface, name string, disableWebhooks bool, timeout 
 	}
 
 	if _, err := c.DeleteRelease(name, opts...); err != nil {
-		return err
+		return fmt.Errorf("Error deleting release %s", err)
 	}
 
 	return nil
@@ -506,28 +530,60 @@ func getChart(d resourceGetter, m *Meta) (c *chart.Chart, path string, err error
 		d.Get("keyring").(string),
 	)
 	if err != nil {
-		return
+		return nil, "", err
 	}
 
 	path, err = l.Locate()
+	debug("looking for chart %s at path %s", l.name, path)
 	if err != nil {
-		return
+		return nil, "", fmt.Errorf("Failed to locate chart from path %s %s", path, err)
 	}
 
-	c, err = chartutil.Load(path)
-	if err != nil {
-		return
-	}
-
-	if req, err := chartutil.LoadRequirements(c); err == nil {
-		if err := checkDependencies(c, req); err != nil {
-			return nil, "", err
+	return c, path, retryLoad(5, time.Second, func() (err error) {
+		debug("Path is %s", path)
+		c, err = chartutil.Load(path)
+		if err != nil {
+			return fmt.Errorf("Failed to load chart %s from path %s, %s", l.name, path, err)
 		}
-	} else if err != chartutil.ErrRequirementsNotFound {
-		return nil, "", fmt.Errorf("cannot load requirements: %v", err)
+
+		if req, err := chartutil.LoadRequirements(c); err == nil {
+			if err := checkDependencies(c, req); err != nil {
+				return stop{fmt.Errorf("Check dependencies failed when getting chart %s", err)}
+			}
+		} else if err != chartutil.ErrRequirementsNotFound {
+			return stop{fmt.Errorf("cannot load requirements when getting chart: %v", err)}
+		}
+
+		return
+	})
+}
+
+func retryLoad(attempts int, sleep time.Duration, f func() (err error)) (err error) {
+
+	err = f()
+
+	if err != nil {
+		if s, ok := err.(stop); ok {
+			// Return the original error for later checking
+			return s.error
+		}
+
+		if attempts--; attempts > 0 {
+			// Add some randomness to prevent creating a Thundering Herd
+			jitter := time.Duration(rand.Int63n(int64(sleep)))
+			sleep = sleep + jitter/2
+
+			time.Sleep(sleep)
+			return retryLoad(attempts, 2*sleep, f)
+		}
+		return fmt.Errorf("Failed Retry, ran out of attempts Error was %s", err)
 	}
 
 	return
+}
+
+type stop struct {
+	error
 }
 
 // Merges source and destination map, preferring values from the source map
@@ -572,7 +628,7 @@ func getValues(d *schema.ResourceData) ([]byte, error) {
 			if values != "" {
 				currentMap := map[string]interface{}{}
 				if err := yaml.Unmarshal([]byte(values), &currentMap); err != nil {
-					return nil, fmt.Errorf("---> %v %s", err, values)
+					return nil, fmt.Errorf("Error marshalling values ---> %v %s", err, values)
 				}
 				base = mergeValues(base, currentMap)
 			}
@@ -613,17 +669,19 @@ func getValues(d *schema.ResourceData) ([]byte, error) {
 	}
 
 	yaml, err := yaml.Marshal(base)
-	if err == nil {
-		yamlString := string(yaml)
-		for _, raw := range d.Get("set_sensitive").(*schema.Set).List() {
-			set := raw.(map[string]interface{})
-			yamlString = strings.Replace(yamlString, set["value"].(string), "<SENSITIVE>", -1)
-		}
 
-		log.Printf("---[ values.yaml ]-----------------------------------\n%s\n", yamlString)
+	if err != nil {
+		return nil, fmt.Errorf("Error occurred coverting values into yaml: %s", err)
 	}
 
-	return yaml, err
+	yamlString := string(yaml)
+	for _, raw := range d.Get("set_sensitive").(*schema.Set).List() {
+		set := raw.(map[string]interface{})
+		yamlString = strings.Replace(yamlString, set["value"].(string), "<SENSITIVE>", -1)
+	}
+
+	log.Printf("---[ values.yaml ]-----------------------------------\n%s\n", yamlString)
+	return yaml, nil
 }
 
 var all = []release.Status_Code{
@@ -642,9 +700,7 @@ func getRelease(client helm.Interface, name string) (*release.Release, error) {
 			return nil, ErrReleaseNotFound
 		}
 
-		debug("could not get release %s", err)
-
-		return nil, err
+		return nil, fmt.Errorf("could not get release %s", err)
 	}
 
 	debug("got release %v", res.Release)
@@ -671,7 +727,7 @@ func newChartLocator(meta *Meta,
 
 	repositoryURL, name, err := resolveChartName(repository, name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not resolve chart named %s %s", name, err)
 	}
 
 	return &chartLocator{
@@ -733,7 +789,7 @@ func (l *chartLocator) locateChartPathInLocal() (string, error) {
 
 	abs, err := filepath.Abs(l.name)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Unable to get absolute filepath %s of chart %s", l.name, err)
 	}
 
 	if l.verify {
@@ -798,7 +854,7 @@ func (l *chartLocator) downloadChart(ref string) (string, error) {
 
 	filename, _, err := dl.DownloadTo(ref, l.version, l.meta.Settings.Home.Archive())
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Failed to download chart version %s %s", l.version, err)
 	}
 
 	debug("Fetched %s to %s\n", ref, filename)
