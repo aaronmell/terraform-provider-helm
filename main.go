@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/hashicorp/terraform/plugin"
-	"github.com/terraform-providers/terraform-provider-helm/helm"
+	"github.com/hashicorp/terraform-plugin-sdk/plugin"
+	"github.com/hashicorp/terraform-provider-helm/helm"
 )
 
 func main() {

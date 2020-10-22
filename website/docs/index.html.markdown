@@ -12,28 +12,28 @@ The Helm provider is used to deploy software packages in Kubernetes. The provide
 
 ## Data Sources
 
-* [Data Sources: helm_repository](repository.html)
+* [Data Sources: helm_repository](d/repository.html)
 
 ## Resources
 
-* [Resource: helm_release](release.html)
+* [Resource: helm_release](r/release.html)
 
 ## Example Usage
 
 ```hcl
 resource "helm_release" "mydatabase" {
-    name      = "mydatabase"
-    chart     = "stable/mariadb"
+  name  = "mydatabase"
+  chart = "stable/mariadb"
 
-    set {
-        name  = "mariadbUser"
-        value = "foo"
-    }
+  set {
+    name  = "mariadbUser"
+    value = "foo"
+  }
 
-    set {
-        name = "mariadbPassword"
-        value = "qux"
-    }
+  set {
+    name  = "mariadbPassword"
+    value = "qux"
+  }
 }
 ```
 
@@ -52,9 +52,9 @@ The provider always first tries to load **a config file** (usually `$HOME/.kube/
 
 ```hcl
 provider "helm" {
-    kubernetes {
-        config_path = "/path/to/kube_cluster.yaml"
-    }
+  kubernetes {
+    config_path = "/path/to/kube_cluster.yaml"
+  }
 }
 ```
 
@@ -64,15 +64,15 @@ The other way is **statically** define all the credentials:
 
 ```hcl
 provider "helm" {
-    kubernetes {
-        host     = "https://104.196.242.174"
-        username = "ClusterMaster"
-        password = "MindTheGap"
+  kubernetes {
+    host     = "https://104.196.242.174"
+    username = "ClusterMaster"
+    password = "MindTheGap"
 
-        client_certificate     = "${file("~/.kube/client-cert.pem")}"
-        client_key             = "${file("~/.kube/client-key.pem")}"
-        cluster_ca_certificate = "${file("~/.kube/cluster-ca-cert.pem")}"
-    }
+    client_certificate     = file("~/.kube/client-cert.pem")
+    client_key             = file("~/.kube/client-key.pem")
+    cluster_ca_certificate = file("~/.kube/cluster-ca-cert.pem")
+  }
 }
 ```
 
@@ -88,7 +88,8 @@ The following arguments are supported:
 * `namespace` - (Optional) Set an alternative Tiller namespace. Defaults to `kube-system`.
 * `init_helm_home` - (Optional) Initialize Helm home directory configured by the `home` attribute if it is not already initialized, defaults to true.
 * `install_tiller` - (Optional) Install Tiller if it is not already installed. Defaults to `true`.
-* `tiller_image` - (Optional) Tiller image to install. Defaults to `gcr.io/kubernetes-helm/tiller:v2.14.1`.
+* `tiller_image` - (Optional) Tiller image to install. Defaults to `gcr.io/kubernetes-helm/tiller:v2.16.8`.
+* `connection_timeout` - (Optional) Number of seconds Helm will wait before timing out a connection to tiller. Defaults to `60`.
 * `service_account` - (Optional) Service account to install Tiller with. Defaults to `default`.
 * `automount_service_account_token` - (Optional) Auto-mount the given service account to tiller. Defaults to `true`.
 * `override` - (Optional) Override values for the Tiller Deployment manifest. Defaults to `true`.

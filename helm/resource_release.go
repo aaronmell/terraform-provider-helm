@@ -8,15 +8,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"google.golang.org/grpc"
 
 	"github.com/ghodss/yaml"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"k8s.io/helm/pkg/chartutil"
 	"k8s.io/helm/pkg/downloader"
 	"k8s.io/helm/pkg/getter"
@@ -29,9 +28,6 @@ import (
 
 // ErrReleaseNotFound is the error when a Helm release is not found
 var ErrReleaseNotFound = errors.New("release not found")
-
-// This is used to escape commas which are not escaped in set_string
-var nonEscapedCommaRegexp = regexp.MustCompile(`([^\\]),`)
 
 func resourceRelease() *schema.Resource {
 	return &schema.Resource{
@@ -51,13 +47,11 @@ func resourceRelease() *schema.Resource {
 			"repository": {
 				Type:        schema.TypeString,
 				Optional:    true,
-				ForceNew:    true,
 				Description: "Repository where to locate the requested chart. If is an URL the chart is installed without installing the repository.",
 			},
 			"chart": {
 				Type:        schema.TypeString,
 				Required:    true,
-				ForceNew:    true,
 				Description: "Chart name to be installed.",
 			},
 			"version": {
@@ -167,6 +161,12 @@ func resourceRelease() *schema.Resource {
 				Optional:    true,
 				Default:     false,
 				Description: "Prevent hooks from running.",
+			},
+			"disable_crd_hooks": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     false,
+				Description: "Prevent CRD hooks from, running, but run other hooks.  See helm install --no-crd-hook",
 			},
 			"reuse_values": {
 				Type:        schema.TypeBool,
@@ -348,6 +348,7 @@ func resourceReleaseCreate(d *schema.ResourceData, meta interface{}) error {
 		helm.InstallReuseName(d.Get("reuse").(bool)),
 		helm.ValueOverrides(values),
 		helm.InstallDisableHooks(d.Get("disable_webhooks").(bool)),
+		helm.InstallDisableCRDHook(d.Get("disable_crd_hooks").(bool)),
 		helm.InstallTimeout(int64(d.Get("timeout").(int))),
 		helm.InstallWait(d.Get("wait").(bool)),
 	}
@@ -640,7 +641,6 @@ func getValues(d *schema.ResourceData) ([]byte, error) {
 
 		name := set["name"].(string)
 		value := set["value"].(string)
-		value = nonEscapedCommaRegexp.ReplaceAllString(value, "$1\\,") // escape any non-escaped commas
 
 		if err := strvals.ParseInto(fmt.Sprintf("%s=%s", name, value), base); err != nil {
 			return nil, fmt.Errorf("failed parsing key %q with value %s, %s", name, value, err)
@@ -652,7 +652,6 @@ func getValues(d *schema.ResourceData) ([]byte, error) {
 
 		name := set["name"].(string)
 		value := set["value"].(string)
-		value = nonEscapedCommaRegexp.ReplaceAllString(value, "$1\\,") // escape any non-escaped commas
 
 		if err := strvals.ParseInto(fmt.Sprintf("%s=%s", name, value), base); err != nil {
 			return nil, fmt.Errorf("failed parsing key %q with sensitive value, %s", name, err)
@@ -664,7 +663,6 @@ func getValues(d *schema.ResourceData) ([]byte, error) {
 
 		name := set["name"].(string)
 		value := set["value"].(string)
-		value = nonEscapedCommaRegexp.ReplaceAllString(value, "$1\\,") // escape any non-escaped commas
 
 		if err := strvals.ParseIntoString(fmt.Sprintf("%s=%s", name, value), base); err != nil {
 			return nil, fmt.Errorf("failed parsing key %q with value %s, %s", name, value, err)

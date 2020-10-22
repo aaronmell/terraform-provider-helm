@@ -1,4 +1,52 @@
-## 0.11.0 (Unreleased)
+## 0.10.5 (June 11, 2020)
+
+FIXES:
+
+* Update helm & tiller to version 2.16.8 (#529)
+* Fix GKE test-infra error related to node_version
+* Set connection_timeout parameter (#355)
+
+IMPROVEMENTS:
+
+* Update Kubernetes to version 1.16.1
+* Update Go to version 1.14
+
+
+## 0.10.4 (October 28, 2019)
+
+FIXES:
+
+* Tiller installed version should match helm client (#365)
+
+## 0.10.3 (October 27, 2019)
+
+IMPROVEMENTS:
+
+* Upgrade Helm to v2.15.1 and Kubernetes to v1.15.5
+* Migrate to terraform-plugin-sdk
+* Allow for colon separated KUBECONFIG (#98)
+* Modernise docs
+
+FIXES:
+
+* Remove manual installation instructions
+* Fix loading kubeconfig when disabled (#307)
+* Don't enable TLS if `enable_tls` is false (#245)
+* Remove ForceNew on repo and chart changes (#173)
+
+## 0.10.2 (August 07, 2019)
+
+FIXES:
+
+* Revert "Escape commas in set_string" (#310)
+
+## 0.10.1 (July 30, 2019)
+
+IMPROVEMENTS:
+
+* Update helm and tiller to 2.14.1 (#294)
+* Wait for tiller if it's not ready (#295)
+
 ## 0.10.0 (June 18, 2019)
 
 FEATURES:
