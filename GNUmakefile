@@ -19,7 +19,7 @@ endif
 default: build
 
 build: fmtcheck
-	go build -v .
+	go build -mod=readonly -v .
 
 test: fmtcheck
 	go test $(TEST) || exit 1

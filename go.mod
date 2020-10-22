@@ -9,6 +9,7 @@ require (
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
 	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/hashicorp/terraform v0.13.4
 	github.com/hashicorp/terraform-plugin-sdk v1.13.1
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/jmoiron/sqlx v1.2.0 // indirect
@@ -18,7 +19,7 @@ require (
 	google.golang.org/grpc v1.27.1
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/apimachinery v0.16.10
-	k8s.io/client-go v0.16.10
+	k8s.io/client-go v10.0.0+incompatible
 	k8s.io/helm v2.16.8+incompatible
 	k8s.io/kubernetes v1.16.1 // indirect
 )
